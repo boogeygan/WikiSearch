@@ -1,0 +1,153 @@
+package dom.gun.ire.minor;
+
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
+
+/**
+ *
+ * @author gagan
+ */
+public class WikiXMLParser
+        extends DefaultHandler {
+
+    int characterCount;
+    protected BufferedWriter out;
+    // all the attributes
+    private FieldType tag;
+    private int level;
+    WikiPage page;
+    private StringBuilder textBuffer;
+    WikiPageIndexer index;
+
+    public WikiXMLParser(String outputDIRName)
+            throws IOException {
+        tag = FieldType.noval;
+        level = 0;
+
+        index = new WikiPageIndexer(outputDIRName);
+        out = new BufferedWriter(new FileWriter(outputDIRName + "finalIndex/Output_Forward"));
+    }
+
+    // all the methods in the class
+    public WikiPageIndexer readXMLFile(String filename) {
+        // System.out.println("Entering Into readXMLFile()");
+        //System.exit(0);
+
+        try {
+            SAXParserFactory factory = SAXParserFactory.newInstance();
+            SAXParser saxParser = factory.newSAXParser();
+
+            saxParser.parse(filename, this);
+
+            return this.index;
+
+        } catch (ParserConfigurationException ex) {
+            System.err.println(ex);
+            return null;
+        } catch (SAXException ex) {
+            System.err.println(ex);
+            return null;
+        } catch (IOException ex) {
+            System.err.println(ex);
+            return null;
+        }
+    }
+
+    @Override
+    public void startElement(String uri, String localName, String qName, Attributes attributes)
+            throws SAXException {
+
+        if (qName.equals("page")) {
+            page = new WikiPage();
+            characterCount = 0;
+        } else {
+            if (level == 2) {
+                if (qName.equals("title")) {
+                    tag = FieldType.title;
+                    textBuffer = new StringBuilder();
+                } else if (qName.equals("id")) {
+                    tag = FieldType.id;
+                    textBuffer = new StringBuilder();
+                }
+            } else {
+                if (qName.equals("text")) {
+                    tag = FieldType.content;
+                    textBuffer = new StringBuilder();
+                }
+            }
+        }
+        level++;
+    }
+
+    @Override
+    public void endElement(String uri, String localName, String qName)
+            throws SAXException {
+
+        switch (tag) {
+            case title:
+                page.setTitle(textBuffer);
+                //textBuffer = null;
+                textBuffer.delete(0, textBuffer.length());
+                //pages.get(pages.size() - 1).setTitle(textBuffer);
+                break;
+            case id:
+                page.setId(Integer.parseInt(textBuffer.toString().trim()));
+                //textBuffer = null;
+                textBuffer.delete(0, textBuffer.length());
+                // pages.get(pages.size() - 1).setId(Integer.parseInt(textBuffer.toString().trim()));
+                break;
+            case content:
+                page.setContent(textBuffer);
+                //textBuffer = null;
+                textBuffer.delete(0, textBuffer.length());
+                //pages.get(pages.size() - 1).setContent(textBuffer);
+                break;
+        }
+
+        if (qName.equals("page")) {
+            try {
+                out.write(Integer.toHexString(page.getId()) + ":");
+                out.write(Integer.toHexString(characterCount) + ":");
+                out.write(page.getTitle().toString());
+                out.newLine();
+
+                //System.exit(0);
+
+
+                this.index.indexPage(page);
+
+            } catch (IOException ex) {
+                System.out.println("Error while creating forward index " + ex);
+            }
+        }
+        tag = FieldType.noval;
+        level--;
+    }
+
+    @Override
+    public void characters(char buf[], int offset, int len)
+            throws SAXException {
+
+        String s = new String(buf, offset, len);
+        //System.out.println(s);
+
+        if (textBuffer == null) {
+            textBuffer = new StringBuilder(s);
+        } else {
+            switch (tag) {
+                case title:
+                case id:
+                case content:
+                    textBuffer.append(s);
+                    characterCount += len;
+            }
+        }
+    }
+}
